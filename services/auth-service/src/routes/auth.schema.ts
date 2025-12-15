@@ -2,7 +2,7 @@ import { z } from "@chat-microservices/common"
 
 export const registerSchema = z.object({
   body: z.object({
-    email: z.email(),
+    email: z.string().email(),
     password: z.string().min(8),
     displayName: z.string().min(3).max(30),
   }),
@@ -10,7 +10,7 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.email(),
+    email: z.string().email(),
     password: z.string().min(8),
   }),
 })
@@ -23,6 +23,6 @@ export const refreshSchema = z.object({
 
 export const revokeSchema = z.object({
   body: z.object({
-    userId: z.uuid(),
+    userId: z.string().uuid(),
   }),
 })
