@@ -1,8 +1,15 @@
 import { sequelize } from "@/db/sequelize"
 import { publishUserRegistered } from "@/messaging/event-publishing"
 import { RefreshToken, UserCredentials } from "@/models"
-import { AuthResponse, RegisterInput } from "@/types/auth"
-import { hashPassword, signAccessToken, signRefreshToken } from "@/utils/token"
+import { AuthResponse, AuthTokens, LoginInput, RegisterInput } from "@/types/auth"
+import { logger } from "@/utils/logger"
+import {
+  hashPassword,
+  signAccessToken,
+  signRefreshToken,
+  verifyPassword,
+  verifyRefreshToken,
+} from "@/utils/token"
 import { HttpError } from "@chat-microservices/common"
 import { Op, Transaction } from "sequelize"
 
@@ -64,6 +71,75 @@ export const register = async (input: RegisterInput): Promise<AuthResponse> => {
     await transaction.rollback()
     throw error
   }
+}
+
+export const login = async (input: LoginInput): Promise<AuthTokens> => {
+  const credential = await UserCredentials.findOne({
+    where: { email: { [Op.eq]: input.email } },
+  })
+
+  if (!credential) {
+    throw new HttpError(401, "Invalid credentials")
+  }
+
+  const valid = await verifyPassword(input.password, credential.passwordHash)
+
+  if (!valid) {
+    throw new HttpError(401, "Invalid credentials")
+  }
+
+  const refreshTokenRecord = await createRefreshToken(credential.id)
+
+  const accessToken = signAccessToken({ sub: credential.id, email: credential.email })
+
+  const refreshToken = signRefreshToken({
+    sub: credential.id,
+    tokenId: refreshTokenRecord.tokenId,
+  })
+
+  return {
+    accessToken,
+    refreshToken,
+  }
+}
+
+export const refreshTokens = async (token: string): Promise<AuthTokens> => {
+  const payload = verifyRefreshToken(token)
+
+  const tokenRecord = await RefreshToken.findOne({
+    where: { tokenId: payload.tokenId, userId: payload.sub },
+  })
+
+  if (!tokenRecord) {
+    throw new HttpError(401, "Invalid refresh token")
+  }
+
+  if (tokenRecord.expiresAt.getTime() < Date.now()) {
+    await tokenRecord.destroy()
+    throw new HttpError(401, "Refresh token has expired")
+  }
+
+  const credential = await UserCredentials.findByPk(payload.sub)
+
+  if (!credential) {
+    logger.warn({ userId: payload.sub }, "User missing for refresh token")
+    throw new HttpError(401, "Invalid refresh token")
+  }
+
+  await tokenRecord.destroy()
+  const newTokenRecord = await createRefreshToken(credential.id)
+
+  return {
+    accessToken: signAccessToken({ sub: credential.id, email: credential.email }),
+    refreshToken: signRefreshToken({
+      sub: credential.id,
+      tokenId: newTokenRecord.tokenId,
+    }),
+  }
+}
+
+export const revokeRefreshToken = async (userId: string) => {
+  await RefreshToken.destroy({ where: { userId } })
 }
 
 const createRefreshToken = async (userId: string, transaction?: Transaction) => {

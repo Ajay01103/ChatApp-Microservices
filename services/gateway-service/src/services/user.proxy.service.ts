@@ -4,7 +4,7 @@ import axios from "axios"
 import { env } from "@/config/env"
 
 const client = axios.create({
-  baseURL: env.AUTH_SERVICE_URL,
+  baseURL: env.USER_SERVICE_URL,
   timeout: 5000,
 })
 
@@ -14,39 +14,31 @@ const authHeader = {
   },
 } as const
 
-export interface AuthTokens {
-  accessToken: string
-  refreshToken: string
-}
-
-export interface UserData {
+export interface UserDto {
   id: string
   email: string
   displayName: string
   createdAt: string
+  updatedAt: string
 }
 
-export interface AuthResponse extends AuthTokens {
-  user: UserData
+export interface UserResponse {
+  data: UserDto
 }
 
-export interface RegisterPayload {
+export interface UserLisResponse {
+  data: UserDto[]
+}
+
+export interface CreateUserPayload {
   email: string
-  password: string
   displayName: string
 }
 
-export interface LoginPayload {
-  email: string
-  password: string
-}
-
-export interface RefreshPayload {
-  refreshToken: string
-}
-
-export interface RevokePayload {
-  userId: string
+export interface SearchUsersParams {
+  query: string
+  limit?: number
+  exclude?: string[]
 }
 
 const resolvedMessage = (status: number, data: unknown): string => {
@@ -58,13 +50,13 @@ const resolvedMessage = (status: number, data: unknown): string => {
   }
 
   return status >= 500
-    ? "Authentication service is unavailable"
+    ? "UserService service is unavailable"
     : "An error occurred while processing the request"
 }
 
 const handleAxiosError = (error: unknown): never => {
   if (!axios.isAxiosError(error) || !error.response) {
-    throw new HttpError(500, "Authentication service is unavailable")
+    throw new HttpError(500, "UserService service is unavailable")
   }
 
   const { status, data } = error.response as { status: number; data: unknown }
@@ -72,44 +64,48 @@ const handleAxiosError = (error: unknown): never => {
   throw new HttpError(status, resolvedMessage(status, data))
 }
 
-export const authProxyService = {
-  async register(payload: RegisterPayload): Promise<AuthResponse> {
+export const userProxyService = {
+  async getUserById(id: string): Promise<UserResponse> {
     try {
-      const response = await client.post<AuthResponse>(
-        "/auth/register",
-        payload,
-        authHeader,
-      )
-
+      const response = await client.get<UserResponse>(`/users/${id}`, authHeader)
       return response.data
     } catch (error) {
       return handleAxiosError(error)
     }
   },
 
-  async login(payload: LoginPayload): Promise<AuthTokens> {
+  async getAllUsers(): Promise<UserLisResponse> {
     try {
-      const response = await client.post<AuthTokens>("/auth/login", payload, authHeader)
-
+      const response = await client.get<UserLisResponse>(`/users`, authHeader)
       return response.data
     } catch (error) {
       return handleAxiosError(error)
     }
   },
 
-  async refresh(payload: RefreshPayload): Promise<AuthTokens> {
+  async createUser(payload: CreateUserPayload): Promise<UserResponse> {
     try {
-      const response = await client.post<AuthTokens>("/auth/refresh", payload, authHeader)
-
+      const response = await client.post<UserResponse>(`/users`, payload, authHeader)
       return response.data
     } catch (error) {
       return handleAxiosError(error)
     }
   },
 
-  async revoke(payload: RevokePayload): Promise<void> {
+  async searchUsers(params: SearchUsersParams): Promise<UserLisResponse> {
     try {
-      await client.post<void>("/auth/revoke", payload, authHeader)
+      const response = await client.get<UserLisResponse>(`/users/search`, {
+        headers: authHeader.headers,
+        params: {
+          query: params.query,
+          ...(params.limit ? { limit: params.limit } : {}),
+          ...(params.exclude && params.exclude.length > 0
+            ? { exclude: params.exclude }
+            : {}),
+        },
+      })
+
+      return response.data
     } catch (error) {
       return handleAxiosError(error)
     }
