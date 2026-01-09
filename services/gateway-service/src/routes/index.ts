@@ -1,6 +1,7 @@
 import type { Router } from "express"
 import { authRouter } from "@/routes/auth.routes"
 import { userRouter } from "./user.routes"
+import { conversationRouter } from "./conversation.routes"
 
 export const registerRoutes = (app: Router) => {
   // Health check endpoint for Docker/K8s
@@ -9,5 +10,6 @@ export const registerRoutes = (app: Router) => {
   })
 
   app.use("/auth", authRouter)
+  app.use("/conversations", conversationRouter)
   app.use("/users", userRouter)
 }
