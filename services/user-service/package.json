@@ -1,5 +1,5 @@
 {
-  "name": "user-service",
+  "name": "@chat-microservices/user-service",
   "version": "1.0.0",
   "description": "",
   "private": "true",
